@@ -1,0 +1,5 @@
+{
+  "name": "Image Gen Bot Simulator",
+  "description": "A simulator for a Telegram bot that generates images using Nano Banana Pro based on user uploads and preset prompts.",
+  "requestFramePermissions": []
+}
