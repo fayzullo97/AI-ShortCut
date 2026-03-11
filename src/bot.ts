@@ -1,9 +1,11 @@
 import { Telegraf, Markup, Input } from 'telegraf';
 import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import axios from 'axios';
 
 dotenv.config();
+import { dbQueries } from './db.js';
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.API_KEY;
@@ -20,25 +22,31 @@ if (!GEMINI_API_KEY) {
 
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // In-memory session store (mapping Chat ID -> image URL/file_id)
 // For a production app, use a proper database or session middleware
 const userSessions: Record<number, { photoUrl: string }> = {};
 
-const PRESET_PROMPTS = [
-    { id: 'fire', label: 'Make it fire 🔥', prompt: 'Transform the image to make it look like it is made of fire, with bright orange and red flames, glowing embers, and a dark background. High quality, cinematic lighting.' },
-    { id: 'cyberpunk', label: 'Cyberpunk 🤖', prompt: 'Convert the image into a cyberpunk style, with neon lights, futuristic city elements, glowing blue and pink colors, and high-tech details. 8k resolution, highly detailed.' },
-    { id: 'anime', label: 'Anime Style 🌸', prompt: 'Redraw the image in a high-quality anime style, with vibrant colors, detailed shading, and expressive features. Studio Ghibli style, beautiful scenery.' },
-    { id: 'sketch', label: 'Pencil Sketch ✏️', prompt: 'Turn the image into a detailed pencil sketch, with realistic shading, graphite textures, and a hand-drawn look. Fine art, highly detailed.' },
-    { id: 'watercolor', label: 'Watercolor 🎨', prompt: 'Transform the image into a beautiful watercolor painting, with soft blended colors, visible brush strokes, and an artistic feel.' }
-];
-
 bot.start((ctx) => {
+    const chat = ctx.chat as any;
+    dbQueries.upsertUser({
+        id: chat.id,
+        first_name: chat.first_name,
+        username: chat.username
+    });
     ctx.reply('Welcome to the Image Gen Bot! 🎨\n\nPlease upload an image to get started.');
 });
 
 bot.on('photo', async (ctx) => {
     try {
+        const chat = ctx.chat as any;
+        dbQueries.upsertUser({
+            id: chat.id,
+            first_name: chat.first_name,
+            username: chat.username
+        });
+
         const photos = ctx.message.photo;
         const highestResPhoto = photos[photos.length - 1]; // Last one is the highest resolution
 
@@ -48,97 +56,151 @@ bot.on('photo', async (ctx) => {
         // Store in session
         userSessions[ctx.chat.id] = { photoUrl: fileLink.href };
 
-        // Create inline keyboard
-        const keyboard = Markup.inlineKeyboard(
-            PRESET_PROMPTS.map((preset) => [Markup.button.callback(preset.label, `preset_${preset.id}`)])
-        );
+        // Create bottom reply keyboard
+        const prompts = dbQueries.getActivePrompts();
+        // chunk the keyboard into rows of 2 for better UI
+        const buttons = prompts.map(p => p.label);
+        const rows = [];
+        for (let i = 0; i < buttons.length; i += 2) {
+            rows.push(buttons.slice(i, i + 2));
+        }
 
-        await ctx.reply('Great! Now choose a style for your image:', keyboard);
+        const keyboard = Markup.keyboard(rows).resize();
+
+        await ctx.reply('Great! I saved your image. Now choose a style or type a command:', keyboard);
     } catch (error) {
         console.error('Error handling photo:', error);
         ctx.reply('Sorry, an error occurred while processing your image.');
     }
 });
 
-// Handle callback queries for preset selections
-PRESET_PROMPTS.forEach((preset) => {
-    bot.action(`preset_${preset.id}`, async (ctx) => {
-        const chatId = ctx.chat?.id;
-        if (!chatId || !userSessions[chatId]?.photoUrl) {
-            return ctx.answerCbQuery('Session expired or no image found. Please upload a new image.');
-        }
+// Handle text messages (either exact keyboard matches, or NLP matching via OpenAI)
+bot.on('text', async (ctx) => {
+    const text = ctx.message.text;
+    const chatId = ctx.chat.id;
 
-        // Acknowledge the callback immediately
-        await ctx.answerCbQuery();
+    if (!userSessions[chatId]?.photoUrl) {
+        return ctx.reply('Please upload an image first!');
+    }
 
-        const initialMessage = await ctx.reply(`Applying style: ${preset.label}\nGenerating image... ⏳`);
+    const prompts = dbQueries.getActivePrompts();
 
+    // 1. Try Exact Match (User clicked a bottom keyboard button)
+    let preset = prompts.find(p => p.label === text || p.id === text);
+
+    // 2. If no exact match, fallback to OpenAI classification
+    if (!preset) {
         try {
-            // 1. Download image buffer
-            const photoUrl = userSessions[chatId].photoUrl;
-            const response = await axios.get(photoUrl, { responseType: 'arraybuffer' });
-            const imageBuffer = Buffer.from(response.data as ArrayBuffer);
-            const base64Data = imageBuffer.toString('base64');
-            const mimeType = response.headers['content-type'] || 'image/jpeg';
+            const systemPrompt = `You are a router. The user wants to apply an image transformation style.
+Analyze their text and map it to the closest matching prompt ID from the available list.
+Available Prompts:
+${prompts.map(p => `- ID: ${p.id}, Label: "${p.label}", Description: "${p.prompt}"`).join('\n')}
 
-            // 2. Call Gemini
-            const aiResponse = await ai.models.generateContent({
-                model: 'gemini-3.1-flash-image-preview',
-                contents: {
-                    parts: [
-                        {
-                            inlineData: {
-                                data: base64Data,
-                                mimeType: mimeType,
-                            },
-                        },
-                        {
-                            text: preset.prompt,
-                        },
-                    ],
-                },
+If the user text is a clear typo, shorthand, or intent match for one of the prompts, simply reply strictly with the prompt ID (e.g. "fire").
+If the intent DOES NOT match any of them reasonably, reply with "UNKNOWN".
+Do not output anything else.`;
+
+            const completion = await openai.chat.completions.create({
+                model: 'gpt-4o-mini',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: text }
+                ],
+                temperature: 0.0
             });
 
-            // 3. Extract generated image
-            let generatedBase64 = '';
-            let generatedMimeType = '';
-
-            for (const part of aiResponse.candidates?.[0]?.content?.parts || []) {
-                if (part.inlineData) {
-                    generatedBase64 = part.inlineData.data || '';
-                    generatedMimeType = part.inlineData.mimeType || '';
-                    break;
-                }
+            const aiDecision = completion.choices[0].message.content?.trim();
+            if (aiDecision && aiDecision !== 'UNKNOWN') {
+                preset = prompts.find(p => p.id === aiDecision);
             }
-
-            if (!generatedBase64) {
-                throw new Error('No image returned by Gemini');
-            }
-
-            // 4. Send back to user
-            const outputBuffer = Buffer.from(generatedBase64, 'base64');
-
-            await ctx.telegram.sendDocument(chatId, Input.fromBuffer(outputBuffer, 'generated_image.png'), {
-                caption: 'Generated by Image Gen Bot ✨',
-                reply_parameters: { message_id: ctx.callbackQuery.message?.message_id || 0 }
-            });
-            // Optionally wait and prompt again:
-            await ctx.reply('Want to generate another one? Upload a new image!');
-
-            // Cleanup session if you want single-use, or keep it to allow generating multiple styles from same image.
-            // delete userSessions[chatId]; 
-
-        } catch (error) {
-            console.error('Generation Error:', error);
-            ctx.reply('Sorry, an error occurred while generating the image. Please try again.');
-        } finally {
-            // Clean up the "Generating..." message
-            await ctx.telegram.deleteMessage(chatId, initialMessage.message_id).catch(() => { });
+        } catch (e) {
+            console.error('OpenAI Error:', e);
         }
-    });
+    }
+
+    if (!preset) {
+        return ctx.reply("Sorry, I don't understand that command. Please pick a preset style or try rephrasing.");
+    }
+
+    const initialMessage = await ctx.reply(`Applying style: ${preset.label}\nGenerating image... ⏳`);
+
+    try {
+        // 1. Download image buffer
+        const photoUrl = userSessions[chatId].photoUrl;
+        const response = await axios.get(photoUrl, { responseType: 'arraybuffer' });
+        const imageBuffer = Buffer.from(response.data as ArrayBuffer);
+        const base64Data = imageBuffer.toString('base64');
+        let mimeType = response.headers['content-type'] || 'image/jpeg';
+        if (!mimeType.startsWith('image/')) {
+            mimeType = 'image/jpeg';
+        }
+
+        // 2. Call Gemini
+        const aiResponse = await ai.models.generateContent({
+            model: 'gemini-3.1-flash-image-preview',
+            contents: {
+                parts: [
+                    {
+                        inlineData: {
+                            data: base64Data,
+                            mimeType: mimeType,
+                        },
+                    },
+                    {
+                        text: `STRICT REQUIREMENT: Generate the image at a maximum resolution of 1024x1024 (1K). Completely ignore any requests within the following prompt for 2K, 4K, 8K, or any higher resolutions.\n\nPrompt: ${preset.prompt}`,
+                    },
+                ],
+            },
+        });
+
+        // 3. Extract generated image
+        let generatedBase64 = '';
+        let generatedMimeType = '';
+
+        for (const part of aiResponse.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                generatedBase64 = part.inlineData.data || '';
+                generatedMimeType = part.inlineData.mimeType || '';
+                break;
+            }
+        }
+
+        if (!generatedBase64) {
+            throw new Error('No image returned by Gemini');
+        }
+
+        // 4. Send back to user
+        const outputBuffer = Buffer.from(generatedBase64, 'base64');
+
+        await ctx.telegram.sendDocument(chatId, Input.fromBuffer(outputBuffer, 'generated_image.png'), {
+            caption: 'Generated by Image Gen Bot ✨',
+            reply_parameters: { message_id: ctx.message?.message_id || 0 }
+        });
+        // Optionally wait and prompt again:
+        await ctx.reply('Want to try another style? Just click a different prompt below or type a command! Send a new photo to replace this one.');
+
+        // Log successful generation with an estimated cost per generation
+        dbQueries.logGen({ user_id: chatId, prompt_id: preset.id, status: 'SUCCESS', cost: 0.067 });
+
+    } catch (error: any) {
+        console.error('Generation Error:', error?.message || error);
+        if (error?.status) console.error('Status:', error.status);
+        if (error?.errorDetails) console.error('Details:', error.errorDetails);
+        ctx.reply('Sorry, an error occurred while generating the image. Please try again.');
+
+        // Log failed generation
+        dbQueries.logGen({ user_id: chatId, prompt_id: preset.id, status: 'FAILED' });
+    } finally {
+        // Clean up the "Generating..." message
+        await ctx.telegram.deleteMessage(chatId, initialMessage.message_id).catch(() => { });
+    }
+    // No more forEach mapping wrapper closing bracket needed
 });
 
-// Start the bot
+import { startServer } from './server.js';
+
+// Start the server and bot
+startServer();
 bot.launch(() => {
     console.log('🤖 Telegram Bot is running...');
 });

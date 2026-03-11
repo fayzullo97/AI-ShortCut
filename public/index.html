@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard | Bot</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+  <div class="sidebar">
+    <div class="logo">Bot Admin</div>
+    <ul class="nav">
+      <li class="active" data-tab="tab-main">Main Dashboard</li>
+      <li data-tab="tab-prompts">Prompts</li>
+    </ul>
+  </div>
+
+  <div class="content">
+
+    <!-- MAIN DASHBOARD TAB -->
+    <div id="tab-main" class="tab-content active">
+      <div class="header">
+        <h1>Bot Analytics</h1>
+        <div class="date-picker">
+          <svg width="16" height="16" fill="none" class="icon">
+            <path d="M4 2v2m8-2v2M2 8h12M3 4h10a1 1 0 011 1v9a1 1 0 01-1 1H3a1 1 0 01-1-1V5a1 1 0 011-1z"
+              stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          All Time
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-title">ACTIVE USERS</div>
+          <div class="stat-value" id="val-active">0</div>
+          <div class="stat-footer">
+            <span class="badge badge-live">LIVE</span>
+            <span class="text-green">Total: <span id="val-total-users">0</span></span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">GENERATIONS</div>
+          <div class="stat-value text-blue" id="val-gens">0</div>
+          <div class="stat-footer">
+            <span id="val-success">0</span> success / <span id="val-failed">0</span> fail
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">SUCCESS RATE</div>
+          <div class="stat-value text-green" id="val-rate">100.0%</div>
+          <div class="stat-footer">Target: > 95%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-title">EST. COST (USD)</div>
+          <div class="stat-value" id="val-cost">$0.00</div>
+          <div class="stat-footer">$0.067 / gen</div>
+        </div>
+      </div>
+
+      <div class="card table-card mt-5">
+        <div class="card-header">
+          <h2>USER LIST & SPEND METRICS</h2>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>CHAT ID</th>
+                <th>NAME</th>
+                <th>GENERATED</th>
+                <th>EST. COST (USD)</th>
+              </tr>
+            </thead>
+            <tbody id="user-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROMPTS TAB -->
+    <div id="tab-prompts" class="tab-content">
+      <div class="header">
+        <h1>Dynamic Prompts</h1>
+        <button class="btn btn-primary" id="open-prompt-modal">+ New Prompt</button>
+      </div>
+
+      <div class="card mt-5">
+        <div class="card-header">
+          <h2>ACTIVE PROMPTS</h2>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>LABEL (BUTTON TEXT)</th>
+                <th>FULL PROMPT</th>
+                <th>STATUS</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="prompts-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal for creating prompt -->
+  <div class="modal" id="prompt-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Create New Prompt</h2>
+        <span class="close" id="close-modal">&times;</span>
+      </div>
+      <div class="modal-body">
+        <form id="form-prompt">
+          <div class="form-group">
+            <label>Prompt ID (lowercase reference)</label>
+            <input type="text" id="input-id" required placeholder="e.g. vintage" />
+          </div>
+          <div class="form-group">
+            <label>Label (Shows on Keyboard)</label>
+            <input type="text" id="input-label" required placeholder="e.g. Vintage Look 📸" />
+          </div>
+          <div class="form-group">
+            <label>Full AI Prompt</label>
+            <textarea id="input-prompt" required rows="4" placeholder="Describe the image effect..."></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Save Prompt</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
