@@ -17,7 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 // Serve static dashboard files from public directory
-app.use(express.static(path.join(__dirname, 'public'))); // Changed process.cwd() to __dirname for ES Modules
+app.use(express.static(path.join(__dirname, '../public')));
 
 // API Routes
 app.get('/api/stats', (req, res) => {
