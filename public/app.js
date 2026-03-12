@@ -43,6 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 data.users.forEach(user => {
                     const name = user.first_name || 'Unknown';
                     const handle = user.username ? `@${user.username}` : '@Unknown';
+                    const freeGens = user.free_generations || 0;
+                    const paidGens = user.paid_generations || 0;
                     const gens = user.generated || 0;
                     const userCost = user.est_cost || 0;
 
@@ -53,8 +55,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 <strong>${name}</strong>
                 <span>${handle}</span>
               </td>
+              <td><span class="badge badge-live">${freeGens}</span></td>
+              <td><span class="badge" style="background:#8b5cf6;color:white;">${paidGens}</span></td>
               <td class="text-blue fw-bold">${gens}</td>
               <td>$${userCost.toFixed(3)}</td>
+              <td>
+                <button class="btn btn-sm" style="background:#10b981;color:white;" onclick="giftUser('${user.chat_id}')">Gift 🎁</button>
+              </td>
             </tr>
           `;
                 });
@@ -139,6 +146,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadPrompts();
             } catch (e) { console.error(e); }
         }
+    };
+
+    window.giftUser = async (id) => {
+        const amount = prompt("How many Free Generations would you like to gift to user " + id + "?");
+        const parsed = parseInt(amount);
+        if (isNaN(parsed) || parsed <= 0) return alert('Invalid amount');
+
+        try {
+            const res = await fetch('/api/users/' + id + '/gift', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: parsed })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert(data.message);
+                loadStats(); // Reload to see the new free limit
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (e) { console.error('Failed to gift:', e); }
     };
 
     window.editPrompt = (id) => {
