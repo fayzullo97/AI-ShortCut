@@ -11,7 +11,7 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename); // Added for consistency with path.join
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080;
 
 app.use(cors());
 app.use(express.json());
@@ -102,8 +102,8 @@ app.post('/api/users/:id/gift', (req, res) => {
 });
 
 export const startServer = () => {
-    app.listen(port, () => {
-        console.log(`📊 Admin Dashboard running on http://localhost:${port}`);
+    app.listen(port as number, '0.0.0.0', () => {
+        console.log(`📊 Admin Dashboard running on http://0.0.0.0:${port}`);
     });
 
     // Start Daily Cron Job to reset free limits
