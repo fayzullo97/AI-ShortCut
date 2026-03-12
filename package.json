@@ -4,12 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "start": "tsx src/bot.ts",
+    "start": "npx tsx src/bot.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
     "@types/axios": "^0.9.36",
+    "@types/node": "^25.4.0",
     "axios": "^1.13.6",
     "better-sqlite3": "^12.6.2",
     "cors": "^2.8.6",
@@ -17,7 +18,9 @@
     "express": "^4.22.1",
     "node-cron": "^4.2.1",
     "openai": "^6.27.0",
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.16.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
