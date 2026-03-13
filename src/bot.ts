@@ -28,17 +28,23 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 // For a production app, use a proper database or session middleware
 const userSessions: Record<number, { photoUrl: string }> = {};
 
+bot.catch((err, ctx) => {
+    console.error(`[TELEGRAF ERROR] for ${ctx.updateType}:`, err);
+});
+
 bot.start(async (ctx) => {
+    console.log(`[BOT] Received /start from ${ctx.from?.id}`);
     const chat = ctx.chat as any;
     await dbQueries.upsertUser({
         id: chat.id,
         first_name: chat.first_name,
         username: chat.username
     });
-    ctx.reply('Welcome to the Image Gen Bot! 🎨\n\nPlease upload an image to get started.');
+    await ctx.reply('Welcome to the Image Gen Bot! 🎨\n\nPlease upload an image to get started.');
 });
 
 bot.on('photo', async (ctx) => {
+    console.log(`[BOT] Received photo from ${ctx.from?.id}`);
     try {
         const chat = ctx.chat as any;
         await dbQueries.upsertUser({
@@ -70,17 +76,18 @@ bot.on('photo', async (ctx) => {
         await ctx.reply('Great! I saved your image. Now choose a style or type a command:', keyboard);
     } catch (error) {
         console.error('Error handling photo:', error);
-        ctx.reply('Sorry, an error occurred while processing your image.');
+        await ctx.reply('Sorry, an error occurred while processing your image.');
     }
 });
 
 // Handle text messages (either exact keyboard matches, or NLP matching via OpenAI)
 bot.on('text', async (ctx) => {
+    console.log(`[BOT] Received text from ${ctx.from?.id}: ${ctx.message.text}`);
     const text = ctx.message.text;
     const chatId = ctx.chat.id;
 
     if (!userSessions[chatId]?.photoUrl) {
-        return ctx.reply('Please upload an image first!');
+        return await ctx.reply('Please upload an image first!');
     }
 
     const prompts = await dbQueries.getActivePrompts();
@@ -119,13 +126,13 @@ Do not output anything else.`;
     }
 
     if (!preset) {
-        return ctx.reply("Sorry, I don't understand that command. Please pick a preset style or try rephrasing.");
+        return await ctx.reply("Sorry, I don't understand that command. Please pick a preset style or try rephrasing.");
     }
 
     // --- MONETIZATION & LIMITS CHECK ---
     const user = await dbQueries.getUser(chatId);
     if (!user) {
-        return ctx.reply('Error reading your user data. Please /start again.');
+        return await ctx.reply('Error reading your user data. Please /start again.');
     }
 
     if (user.free_generations <= 0 && user.paid_generations <= 0) {
@@ -207,7 +214,7 @@ Do not output anything else.`;
         console.error('Generation Error:', error?.message || error);
         if (error?.status) console.error('Status:', error.status);
         if (error?.errorDetails) console.error('Details:', error.errorDetails);
-        ctx.reply('Sorry, an error occurred while generating the image. Please try again.');
+        await ctx.reply('Sorry, an error occurred while generating the image. Please try again.');
 
         // Log failed generation
         await dbQueries.logGen({ user_id: chatId, prompt_id: preset.id, status: 'FAILED' });

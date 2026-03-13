@@ -2,6 +2,7 @@ import { supabase } from './supabase.js';
 
 export const dbQueries = {
   upsertUser: async (user: { id: number; first_name?: string; username?: string }) => {
+    console.log(`[DB] Upserting user ${user.id}`);
     const { error } = await supabase
       .from('users')
       .upsert({
@@ -98,6 +99,7 @@ export const dbQueries = {
   },
 
   getActivePrompts: async () => {
+    console.log('[DB] Fetching active prompts');
     const { data, error } = await supabase
       .from('prompts')
       .select('*')
