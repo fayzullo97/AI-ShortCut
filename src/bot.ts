@@ -7,18 +7,25 @@ import axios from 'axios';
 dotenv.config();
 import { dbQueries } from './db.js';
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.API_KEY;
+const REQUIRED_ENV_VARS = [
+    'TELEGRAM_BOT_TOKEN',
+    'GEMINI_API_KEY',
+    'OPENAI_API_KEY',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY'
+];
 
-if (!TELEGRAM_BOT_TOKEN) {
-    console.error('TELEGRAM_BOT_TOKEN is not defined in .env');
+const missingVars = REQUIRED_ENV_VARS.filter(v => !process.env[v]);
+
+if (missingVars.length > 0) {
+    console.error('❌ Missing required environment variables:');
+    missingVars.forEach(v => console.error(`   - ${v}`));
+    console.error('\nIf you are deploying to Railway, make sure to add these in the project dashboard.');
     process.exit(1);
 }
 
-if (!GEMINI_API_KEY) {
-    console.error('GEMINI_API_KEY is not defined in .env');
-    process.exit(1);
-}
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN as string;
+const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || process.env.API_KEY) as string;
 
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
