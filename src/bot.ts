@@ -168,7 +168,7 @@ Do not output anything else.`;
                         },
                     },
                     {
-                        text: `STRICT REQUIREMENT: Generate the image at a maximum resolution of 1024x1024 (1K). Completely ignore any requests within the following prompt for 2K, 4K, 8K, or any higher resolutions.\n\nPrompt: ${preset.prompt}`,
+                        text: `STRICT REQUIREMENT: Generate the image with a strict 3:4 aspect ratio (portrait) and at a maximum resolution of 1024x1024 (1K). Completely ignore any requests within the following prompt for 2K, 4K, 8K, or any higher resolutions, or any other aspect ratios.\n\nPrompt: ${preset.prompt}`,
                     },
                 ],
             },
@@ -259,7 +259,7 @@ bot.on('successful_payment', async (ctx) => {
                     contents: {
                         parts: [
                             { inlineData: { data: base64Data, mimeType: mimeType } },
-                            { text: `STRICT REQUIREMENT: Generate the image at a maximum resolution of 1024x1024 (1K). Completely ignore any requests within the following prompt for 2K, 4K, 8K, or any higher resolutions.\n\nPrompt: ${preset.prompt}` }
+                            { text: `STRICT REQUIREMENT: Generate the image with a strict 3:4 aspect ratio (portrait) and at a maximum resolution of 1024x1024 (1K). Completely ignore any requests within the following prompt for 2K, 4K, 8K, or any higher resolutions, or any other aspect ratios.\n\nPrompt: ${preset.prompt}` }
                         ]
                     }
                 });
