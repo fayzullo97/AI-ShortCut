@@ -28,9 +28,9 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 // For a production app, use a proper database or session middleware
 const userSessions: Record<number, { photoUrl: string }> = {};
 
-bot.start((ctx) => {
+bot.start(async (ctx) => {
     const chat = ctx.chat as any;
-    dbQueries.upsertUser({
+    await dbQueries.upsertUser({
         id: chat.id,
         first_name: chat.first_name,
         username: chat.username
@@ -41,7 +41,7 @@ bot.start((ctx) => {
 bot.on('photo', async (ctx) => {
     try {
         const chat = ctx.chat as any;
-        dbQueries.upsertUser({
+        await dbQueries.upsertUser({
             id: chat.id,
             first_name: chat.first_name,
             username: chat.username
@@ -57,7 +57,7 @@ bot.on('photo', async (ctx) => {
         userSessions[ctx.chat.id] = { photoUrl: fileLink.href };
 
         // Create bottom reply keyboard
-        const prompts = dbQueries.getActivePrompts();
+        const prompts = await dbQueries.getActivePrompts();
         // chunk the keyboard into rows of 2 for better UI
         const buttons = prompts.map(p => p.label);
         const rows = [];
@@ -83,7 +83,7 @@ bot.on('text', async (ctx) => {
         return ctx.reply('Please upload an image first!');
     }
 
-    const prompts = dbQueries.getActivePrompts();
+    const prompts = await dbQueries.getActivePrompts();
 
     // 1. Try Exact Match (User clicked a bottom keyboard button)
     let preset = prompts.find(p => p.label === text || p.id === text);
@@ -123,7 +123,7 @@ Do not output anything else.`;
     }
 
     // --- MONETIZATION & LIMITS CHECK ---
-    const user = dbQueries.getUser(chatId);
+    const user = await dbQueries.getUser(chatId);
     if (!user) {
         return ctx.reply('Error reading your user data. Please /start again.');
     }
@@ -141,7 +141,7 @@ Do not output anything else.`;
     }
 
     // Deduct a generation immediately since they have enough
-    dbQueries.decrementUserGen(chatId);
+    await dbQueries.decrementUserGen(chatId);
 
     const initialMessage = await ctx.reply(`Applying style: ${preset.label}\nGenerating image... ⏳`);
 
@@ -201,7 +201,7 @@ Do not output anything else.`;
         await ctx.reply('Want to try another style? Just click a different prompt below or type a command! Send a new photo to replace this one.');
 
         // Log successful generation with an estimated cost per generation
-        dbQueries.logGen({ user_id: chatId, prompt_id: preset.id, status: 'SUCCESS', cost: 0.067 });
+        await dbQueries.logGen({ user_id: chatId, prompt_id: preset.id, status: 'SUCCESS', cost: 0.067 });
 
     } catch (error: any) {
         console.error('Generation Error:', error?.message || error);
@@ -210,7 +210,7 @@ Do not output anything else.`;
         ctx.reply('Sorry, an error occurred while generating the image. Please try again.');
 
         // Log failed generation
-        dbQueries.logGen({ user_id: chatId, prompt_id: preset.id, status: 'FAILED' });
+        await dbQueries.logGen({ user_id: chatId, prompt_id: preset.id, status: 'FAILED' });
     } finally {
         // Clean up the "Generating..." message
         await ctx.telegram.deleteMessage(chatId, initialMessage.message_id).catch(() => { });
@@ -230,17 +230,17 @@ bot.on('successful_payment', async (ctx) => {
     const payload = ctx.message.successful_payment.invoice_payload;
 
     // Grant the paid generation
-    dbQueries.addPaidGenerations(chatId, 1);
+    await dbQueries.addPaidGenerations(chatId, 1);
 
     // Automatically trigger the generation if we know what prompt they paid for
     if (payload && payload.startsWith('gen_')) {
         const promptId = payload.replace('gen_', '');
-        const prompts = dbQueries.getActivePrompts();
+        const prompts = await dbQueries.getActivePrompts();
         const preset = prompts.find(p => p.id === promptId);
 
         if (preset && userSessions[chatId]?.photoUrl) {
             // Deduct the newly added generation since we are running it instantly
-            dbQueries.decrementUserGen(chatId);
+            await dbQueries.decrementUserGen(chatId);
 
             const initialMessage = await ctx.reply(`Payment successful! 🎉\nApplying style: ${preset.label}\nGenerating image... ⏳`);
 
@@ -277,14 +277,14 @@ bot.on('successful_payment', async (ctx) => {
                     reply_parameters: { message_id: ctx.message?.message_id || 0 }
                 });
                 await ctx.reply('Want to try another style? Click below or type a custom query. If you run out of credits, it costs 40 ⭐️ per generation!');
-                dbQueries.logGen({ user_id: chatId, prompt_id: preset.id, status: 'SUCCESS', cost: 0.067 });
+                await dbQueries.logGen({ user_id: chatId, prompt_id: preset.id, status: 'SUCCESS', cost: 0.067 });
 
             } catch (error: any) {
                 console.error('Generation Error Post-Payment:', error?.message || error);
                 // Refund them their physical generation count since it failed
-                dbQueries.addPaidGenerations(chatId, 1);
+                await dbQueries.addPaidGenerations(chatId, 1);
                 ctx.reply('An error occurred during generation. I have refunded your generation credit! Feel free to try again.');
-                dbQueries.logGen({ user_id: chatId, prompt_id: preset.id, status: 'FAILED' });
+                await dbQueries.logGen({ user_id: chatId, prompt_id: preset.id, status: 'FAILED' });
             } finally {
                 await ctx.telegram.deleteMessage(chatId, initialMessage.message_id).catch(() => { });
             }

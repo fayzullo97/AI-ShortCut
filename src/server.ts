@@ -20,65 +20,65 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
 // API Routes
-app.get('/api/stats', (req, res) => {
+app.get('/api/stats', async (req, res) => {
     try {
-        const stats = dbQueries.getDashboardStats();
-        const users = dbQueries.getUserMetrics();
+        const stats = await dbQueries.getDashboardStats();
+        const users = await dbQueries.getUserMetrics();
         res.json({ success: true, stats, users });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-app.get('/api/prompts', (req, res) => {
+app.get('/api/prompts', async (req, res) => {
     try {
-        const prompts = dbQueries.getAllPrompts();
+        const prompts = await dbQueries.getAllPrompts();
         res.json({ success: true, prompts });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-app.post('/api/prompts', (req, res) => {
+app.post('/api/prompts', async (req, res) => {
     try {
         const { id, label, prompt } = req.body;
         if (!id || !label || !prompt) {
             return res.status(400).json({ success: false, error: 'Missing required fields: id, label, prompt' });
         }
-        dbQueries.addPrompt({ id, label, prompt });
+        await dbQueries.addPrompt({ id, label, prompt });
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-app.put('/api/prompts/:id', (req, res) => {
+app.put('/api/prompts/:id', async (req, res) => {
     try {
         const id = req.params.id;
         const { label, prompt } = req.body;
         if (!label || !prompt) {
             return res.status(400).json({ success: false, error: 'Missing required fields' });
         }
-        dbQueries.updatePrompt({ id, label, prompt });
+        await dbQueries.updatePrompt({ id, label, prompt });
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-app.patch('/api/prompts/:id/toggle', (req, res) => {
+app.patch('/api/prompts/:id/toggle', async (req, res) => {
     try {
-        dbQueries.togglePromptStatus(req.params.id);
+        await dbQueries.togglePromptStatus(req.params.id);
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-app.delete('/api/prompts/:id', (req, res) => {
+app.delete('/api/prompts/:id', async (req, res) => {
     try {
         const id = req.params.id;
-        dbQueries.removePrompt(id);
+        await dbQueries.removePrompt(id);
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
@@ -86,7 +86,7 @@ app.delete('/api/prompts/:id', (req, res) => {
 });
 
 // GIFT FREE GENERATIONS
-app.post('/api/users/:id/gift', (req, res) => {
+app.post('/api/users/:id/gift', async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const { amount } = req.body;
@@ -94,7 +94,7 @@ app.post('/api/users/:id/gift', (req, res) => {
             return res.status(400).json({ error: 'Invalid payload' });
         }
 
-        dbQueries.addFreeGenerations(id, amount);
+        await dbQueries.addFreeGenerations(id, amount);
         res.json({ success: true, message: `Gifted ${amount} generations to ${id}` });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
@@ -109,13 +109,13 @@ export const startServer = () => {
     // Start Daily Cron Job to reset free limits
     const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN as string);
 
-    cron.schedule('0 0 * * *', () => {
+    cron.schedule('0 0 * * *', async () => {
         console.log('⏰ Running daily check for free generation resets...');
-        const eligibleUsers = dbQueries.getUsersForMonthlyReset();
+        const eligibleUsers = await dbQueries.getUsersForMonthlyReset();
 
-        eligibleUsers.forEach((user) => {
+        for (const user of eligibleUsers) {
             try {
-                dbQueries.resetUserFreeGens(user.id);
+                await dbQueries.resetUserFreeGens(user.id);
                 // Notify the user over Telegram
                 bot.telegram.sendMessage(
                     user.id,
@@ -125,6 +125,6 @@ export const startServer = () => {
             } catch (e) {
                 console.error(`Error resetting user ${user.id}:`, e);
             }
-        });
+        }
     });
 };
